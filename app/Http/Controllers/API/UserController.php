@@ -10,6 +10,7 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
 use Laravel\Fortify\Rules\Password;
 use Illuminate\Support\Facades\Auth;
+use PhpParser\Node\Stmt\TryCatch;
 
 class UserController extends Controller
 {
@@ -47,5 +48,78 @@ class UserController extends Controller
                 'error' => $error,
             ], 'Authentication failed', 400);
         }
+    }
+
+    public function login(Request $request) 
+    {
+        try {
+            $request->validate([
+                'email' => ['required', 'email'],
+                'password' => ['required']
+            ]);
+
+            $credentials = ([
+                'email' => $request->email,
+                'password' => $request->password
+            ]);
+
+            
+
+            if( !Auth::attempt($credentials) ) {
+                return ResponseFormatter::error ([
+                    'message' => 'unauthorized'
+                ], 'Authetication Failed', 400);
+            }
+
+            
+            $user = User::where('email', $request->email)->first();
+
+            if (!Hash::check($request->password, $user->password, [])) {
+                throw new \Exception('Invalid Credentials');
+            }
+   
+            $tokenResult = $user->createToken('authToken')->plainTextToken;
+
+            return ResponseFormatter::success([
+                'access_token' => $tokenResult,
+                'tokenType' => 'Bearer',
+                'user' => $user
+            ], 'Authenticated');
+
+        } catch (Exception $error) {
+            return ResponseFormatter::error ([
+                'message' => 'Something went wrong',
+                'error' => $error
+            ], 'Authetication Failed', 500);
+        }
+    }
+
+    public function fetch(Request $request)
+    {
+        return ResponseFormatter::success($request->user(),
+            'Data Profile user berhasil diambil');
+    }
+
+    public function updateProfile(Request $request)
+    {
+        $data = $request->all();
+
+        $user = Auth::user();
+        $user->update($data);
+
+        return ResponseFormatter::success(
+            $user,
+            'Update Profile Berhasil'
+        );
+    }
+
+    public function logout(Request $request)
+    {
+        $token = $request->user()->currentAccessToken()->delete();
+
+        return ResponseFormatter::success(
+            $token,
+            'Token Revoke'
+        );
     }
 }
